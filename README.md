@@ -11,8 +11,8 @@ An abstraction layer for LLM assistants. Provider-agnostic core, framework adapt
 | `@ultrapilot/react` | React hooks (`useAssistantThread`, `useThreadList`) |
 | `@ultrapilot/ui` | Headless React UI components |
 | `@ultrapilot/storage-sqlite` | SQLite/libSQL storage adapter |
-| `@ultrapilot/provider-google` | Google Gemini `ModelAdapter` via token.js |
-| `@ultrapilot/provider-openai` | OpenAI `ModelAdapter` via token.js |
+
+Bring your own model: implement the `ModelAdapter` interface from `@ultrapilot/core/provider` against whatever you use (Mastra, AI SDK, direct SDK, Bedrock, etc.).
 
 ## Install (workspace)
 
