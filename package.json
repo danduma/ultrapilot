@@ -1,0 +1,16 @@
+{
+	"name": "ultrapilot",
+	"private": true,
+	"type": "module",
+	"packageManager": "bun@1.2.18",
+	"workspaces": [
+		"packages/*"
+	],
+	"scripts": {
+		"test": "bun test"
+	},
+	"devDependencies": {
+		"@types/react": "^19.2.10",
+		"typescript": "^6.0.2"
+	}
+}

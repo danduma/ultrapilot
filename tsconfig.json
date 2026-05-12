@@ -1,0 +1,19 @@
+{
+	"compilerOptions": {
+		"strict": true,
+		"strictNullChecks": true,
+		"moduleResolution": "bundler",
+		"module": "esnext",
+		"target": "ES2022",
+		"lib": ["dom", "dom.iterable", "esnext"],
+		"jsx": "react-jsx",
+		"esModuleInterop": true,
+		"skipLibCheck": true,
+		"resolveJsonModule": true,
+		"isolatedModules": true,
+		"noEmit": true,
+		"allowImportingTsExtensions": false,
+		"forceConsistentCasingInFileNames": true
+	},
+	"include": ["packages/*/src/**/*.ts", "packages/*/src/**/*.tsx"]
+}

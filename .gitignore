@@ -1,0 +1,11 @@
+node_modules
+.turbo
+dist
+build
+*.log
+.DS_Store
+.env
+.env.local
+coverage
+.idea
+.vscode
