@@ -11,8 +11,5 @@
 		"./provider": "./src/provider.ts",
 		"./storage": "./src/storage.ts",
 		"./types": "./src/types.ts"
-	},
-	"devDependencies": {
-		"@ultrapilot/storage-sqlite": "workspace:*"
 	}
 }

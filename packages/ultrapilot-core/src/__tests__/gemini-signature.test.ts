@@ -22,10 +22,7 @@ function assistant(
 	};
 }
 
-function tool(
-	id: string,
-	parts: AssistantMessage["parts"],
-): AssistantMessage {
+function tool(id: string, parts: AssistantMessage["parts"]): AssistantMessage {
 	return {
 		id,
 		threadId: "t",
@@ -69,14 +66,35 @@ describe("hasGoogleThoughtSignature", () => {
 	});
 
 	it("returns false for non-google providerOptions only", () => {
-		expect(
-			hasGoogleThoughtSignature({ openai: { reasoning: "blah" } }),
-		).toBe(false);
+		expect(hasGoogleThoughtSignature({ openai: { reasoning: "blah" } })).toBe(
+			false,
+		);
 	});
 });
 
 describe("findToolCallsMissingGoogleSignature", () => {
-	it("flags assistant tool-calls without google.thoughtSignature", () => {
+	it("flags the first assistant tool-call when it lacks google.thoughtSignature", () => {
+		const missing = findToolCallsMissingGoogleSignature([
+			assistant("a1", [
+				{
+					type: "tool-call",
+					toolCallId: "call-1",
+					toolName: "get_timeline_state",
+					args: {},
+				},
+				{
+					type: "tool-call",
+					toolCallId: "call-2",
+					toolName: "find_scenes",
+					args: { q: "panda" },
+					providerOptions: { google: { thoughtSignature: "sig" } },
+				},
+			]),
+		]);
+		expect([...missing]).toEqual(["call-1"]);
+	});
+
+	it("allows unsigned later tool-calls in the same parallel assistant step", () => {
 		const missing = findToolCallsMissingGoogleSignature([
 			assistant("a1", [
 				{
@@ -94,7 +112,7 @@ describe("findToolCallsMissingGoogleSignature", () => {
 				},
 			]),
 		]);
-		expect([...missing]).toEqual(["call-2"]);
+		expect(missing.size).toBe(0);
 	});
 
 	it("respects the excludedToolCallIds set", () => {
@@ -140,29 +158,29 @@ describe("enforceGeminiSignatureInvariant", () => {
 			assistant("a-broken", [
 				{
 					type: "tool-call",
-					toolCallId: "call-signed",
+					toolCallId: "call-unsigned",
 					toolName: "get_timeline_state",
 					args: {},
-					providerOptions: { google: { thoughtSignature: "sig" } },
 				},
 				{
 					type: "tool-call",
-					toolCallId: "call-unsigned",
+					toolCallId: "call-signed",
 					toolName: "find_scenes",
 					args: { q: "panda" },
+					providerOptions: { google: { thoughtSignature: "sig" } },
 				},
 			]),
 			tool("t-broken", [
 				{
 					type: "tool-result",
-					toolCallId: "call-signed",
+					toolCallId: "call-unsigned",
 					toolName: "get_timeline_state",
 					result: {},
 					isError: false,
 				},
 				{
 					type: "tool-result",
-					toolCallId: "call-unsigned",
+					toolCallId: "call-signed",
 					toolName: "find_scenes",
 					result: { results: [] },
 					isError: false,
@@ -178,14 +196,14 @@ describe("enforceGeminiSignatureInvariant", () => {
 			{
 				type: "dropped-turn",
 				reason: "missing-google-thought-signature",
-				toolCallIds: ["call-signed", "call-unsigned"],
+				toolCallIds: ["call-unsigned", "call-signed"],
 				offendingToolCallIds: ["call-unsigned"],
 				messageId: "a-broken",
 			},
 			{
 				type: "dropped-tool-results",
 				reason: "orphaned-by-turn-drop",
-				toolCallIds: ["call-signed", "call-unsigned"],
+				toolCallIds: ["call-unsigned", "call-signed"],
 				messageId: "t-broken",
 			},
 		]);

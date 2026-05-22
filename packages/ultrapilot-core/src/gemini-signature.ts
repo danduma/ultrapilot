@@ -2,10 +2,12 @@
  * Gemini history-replay invariant — see
  * `docs/notes/2026-05-12-gemini-thought-signature-invariant.md`.
  *
- * Google's Gemini API requires every replayed tool-call to carry the
- * opaque `providerOptions.google.thoughtSignature` that the model
- * returned on its original turn. Missing it → 400 with "Function call
- * is missing a thought_signature in functionCall parts".
+ * Google's Gemini API requires the first replayed tool-call in each
+ * assistant step to carry the opaque
+ * `providerOptions.google.thoughtSignature` that the model returned on its
+ * original turn. Later parallel tool calls in that same step may
+ * legitimately omit it. Missing the required signature → 400 with
+ * "Function call is missing a thought_signature in functionCall parts".
  *
  * The helpers in this module enforce that invariant on the canonical
  * `AssistantMessage[]` history, regardless of which provider runtime
@@ -82,10 +84,11 @@ function isToolResultPart(
 }
 
 /**
- * Walks `messages` and returns the set of tool-call ids that would
- * violate the Gemini invariant if replayed — i.e. tool-call parts on an
- * assistant message whose `providerOptions.google.thoughtSignature` is
- * missing, excluding any ids in `excludedToolCallIds`.
+ * Walks `messages` and returns the set of tool-call ids that would violate
+ * the Gemini invariant if replayed — i.e. the first non-excluded tool-call
+ * part on an assistant message whose `providerOptions.google.thoughtSignature`
+ * is missing. Subsequent tool calls in the same assistant message are treated
+ * as parallel calls and do not require their own signature.
  */
 export function findToolCallsMissingGoogleSignature(
 	messages: readonly AssistantMessage[],
@@ -107,6 +110,7 @@ export function findToolCallsMissingGoogleSignature(
 			if (!hasGoogleThoughtSignature(part.providerOptions)) {
 				missing.add(part.toolCallId);
 			}
+			break;
 		}
 	}
 
@@ -149,9 +153,7 @@ export function enforceGeminiSignatureInvariant(
 			const toolCallIdsOnTurn = message.parts
 				.filter(isToolCallPart)
 				.map((part) => part.toolCallId);
-			const turnIsOffending = toolCallIdsOnTurn.some((id) =>
-				offending.has(id),
-			);
+			const turnIsOffending = toolCallIdsOnTurn.some((id) => offending.has(id));
 			if (turnIsOffending) {
 				log({
 					type: "dropped-turn",
@@ -173,7 +175,8 @@ export function enforceGeminiSignatureInvariant(
 
 		if (message.role === "tool") {
 			const remainingParts = message.parts.filter(
-				(part) => !isToolResultPart(part) || !droppedToolCallIds.has(part.toolCallId),
+				(part) =>
+					!isToolResultPart(part) || !droppedToolCallIds.has(part.toolCallId),
 			);
 			if (remainingParts.length === 0) {
 				log({
