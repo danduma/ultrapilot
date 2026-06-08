@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { createAssistant } from "../assistant";
+import { createUltraPilot } from "../assistant";
 import type { ModelAdapter } from "../provider";
 import { createInMemoryStorage } from "../storage";
 import type { AssistantMessage } from "../types";
@@ -58,7 +58,7 @@ describe("run engine", () => {
 			},
 		};
 
-		const assistant = createAssistant({
+		const ultrapilot = createUltraPilot({
 			provider,
 			storage: createInMemoryStorage(),
 			systemPrompt: "Be concise.",
@@ -69,7 +69,7 @@ describe("run engine", () => {
 			},
 		});
 
-		const result = await assistant.send({ text: "Hi" });
+		const result = await ultrapilot.send({ text: "Hi" });
 		const assistantMessage = result.messages.find(
 			(message) => message.role === "assistant",
 		);
@@ -116,7 +116,7 @@ describe("run engine", () => {
 			},
 		};
 
-		const assistant = createAssistant({
+		const ultrapilot = createUltraPilot({
 			provider,
 			storage: createInMemoryStorage(),
 			systemPrompt: "Use tools when needed.",
@@ -138,7 +138,7 @@ describe("run engine", () => {
 			},
 		});
 
-		const result = await assistant.send({ text: "What is 2 + 3?" });
+		const result = await ultrapilot.send({ text: "What is 2 + 3?" });
 		const roles = result.messages.map((message) => message.role);
 
 		expect(roles).toEqual(["user", "assistant", "tool", "assistant"]);
@@ -176,7 +176,7 @@ describe("run engine", () => {
 		const thread = await storage.createThread({});
 		expect(thread.activeBranchId).not.toBeNull();
 		const branchId = thread.activeBranchId as string;
-		const assistant = createAssistant({
+		const ultrapilot = createUltraPilot({
 			provider,
 			storage,
 			systemPrompt: "Be concise.",
@@ -197,7 +197,7 @@ describe("run engine", () => {
 			branchId,
 		});
 
-		await assistant.generateStep({
+		await ultrapilot.generateStep({
 			threadId: thread.id,
 			branchId,
 			messages: [

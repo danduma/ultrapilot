@@ -37,9 +37,11 @@ export function MessageList({ messages }: { messages: AssistantMessage[] }) {
 						>
 							{part.type === "text" || part.type === "reasoning"
 								? part.text
-								: part.type === "tool-call"
-									? `Tool call: ${part.toolName} ${JSON.stringify(part.args)}`
-									: `Tool result: ${part.toolName} ${JSON.stringify(part.result)}`}
+								: part.type === "image"
+									? `Image: ${part.image}`
+									: part.type === "tool-call"
+										? `Tool call: ${part.toolName} ${JSON.stringify(part.args)}`
+										: `Tool result: ${part.toolName} ${JSON.stringify(part.result)}`}
 						</div>
 					))}
 				</div>

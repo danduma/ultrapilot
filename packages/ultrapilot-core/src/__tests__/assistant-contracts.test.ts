@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { createAssistant } from "../assistant";
+import { createUltraPilot } from "../assistant";
 import type {
 	AssistantBranch,
 	AssistantEvent,
@@ -86,22 +86,22 @@ function createStorage(): AssistantStorage {
 	};
 }
 
-describe("createAssistant", () => {
+describe("createUltraPilot", () => {
 	it("returns an assistant runtime with the expected public APIs", () => {
-		const assistant = createAssistant({
+		const ultrapilot = createUltraPilot({
 			provider: createProvider(),
 			storage: createStorage(),
 			systemPrompt: "You are helpful.",
 			tools: {},
 		});
 
-		expect(typeof assistant.send).toBe("function");
-		expect(typeof assistant.generateStep).toBe("function");
-		expect(typeof assistant.regenerate).toBe("function");
-		expect(typeof assistant.editMessage).toBe("function");
-		expect(typeof assistant.forkBranch).toBe("function");
-		expect(typeof assistant.truncateBranch).toBe("function");
-		expect(typeof assistant.listThreads).toBe("function");
+		expect(typeof ultrapilot.send).toBe("function");
+		expect(typeof ultrapilot.generateStep).toBe("function");
+		expect(typeof ultrapilot.regenerate).toBe("function");
+		expect(typeof ultrapilot.editMessage).toBe("function");
+		expect(typeof ultrapilot.forkBranch).toBe("function");
+		expect(typeof ultrapilot.truncateBranch).toBe("function");
+		expect(typeof ultrapilot.listThreads).toBe("function");
 	});
 
 	it("supports message parts and events for reasoning and tool calls", () => {

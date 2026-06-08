@@ -22,6 +22,21 @@ export type ReasoningPart = {
 	providerOptions?: PartProviderOptions;
 };
 
+/**
+ * Multimodal image input part. `image` is either a remote URL or a `data:` URI
+ * (the same shape the AI SDK / Mastra accept for image content). Carried on a
+ * single user `AssistantMessage` so generation requests can mix text and image
+ * parts (e.g. scene-description prompts). Wire conversion lives in the provider
+ * adapter; signature/exhaustive handling in core treats it as inert content.
+ */
+export type ImagePart = {
+	type: "image";
+	/** URL or `data:` URI for the image. */
+	image: string;
+	mediaType?: string;
+	providerOptions?: PartProviderOptions;
+};
+
 export type ToolCallPart = {
 	type: "tool-call";
 	toolCallId: string;
@@ -41,6 +56,7 @@ export type ToolResultPart = {
 export type AssistantMessagePart =
 	| TextPart
 	| ReasoningPart
+	| ImagePart
 	| ToolCallPart
 	| ToolResultPart;
 

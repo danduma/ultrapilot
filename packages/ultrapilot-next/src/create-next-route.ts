@@ -19,7 +19,7 @@ type OperationLike = {
 	checkpoints?: unknown[];
 };
 
-type AssistantLike = {
+type UltraPilotLike = {
 	createThread(input?: {
 		id?: string;
 		title?: string | null;
@@ -71,7 +71,7 @@ type AssistantLike = {
 };
 
 type CreateNextRouteOptions = {
-	assistant: AssistantLike;
+	ultrapilot: UltraPilotLike;
 	resolveContext?: (request: Request) => Promise<Record<string, unknown>>;
 };
 
@@ -122,15 +122,15 @@ function json(body: unknown, status = 200) {
 }
 
 async function appendAndGenerate(
-	assistant: AssistantLike,
+	ultrapilot: UltraPilotLike,
 	body: AppendAndGenerateBody,
 ) {
 	const existingThread =
-		body.threadId != null ? await assistant.getThread(body.threadId) : null;
+		body.threadId != null ? await ultrapilot.getThread(body.threadId) : null;
 	const thread =
 		existingThread ??
 		(body.newMessages?.length
-			? await assistant.createThread(
+			? await ultrapilot.createThread(
 					body.threadId ? { id: body.threadId } : undefined,
 				)
 			: null);
@@ -151,7 +151,7 @@ async function appendAndGenerate(
 			threadId,
 			branchId,
 		}));
-		await assistant.appendMessages({
+		await ultrapilot.appendMessages({
 			threadId,
 			branchId,
 			messages: normalizedMessages,
@@ -168,14 +168,14 @@ async function appendAndGenerate(
 				) {
 					const title = (part.result as Record<string, unknown>).title;
 					if (typeof title === "string" && title.length > 0) {
-						await assistant.renameThread(threadId, title);
+						await ultrapilot.renameThread(threadId, title);
 					}
 				}
 			}
 		}
 	}
 
-	return assistant.generateStep({ threadId, branchId });
+	return ultrapilot.generateStep({ threadId, branchId });
 }
 
 export function createNextRoute(options: CreateNextRouteOptions) {
@@ -186,7 +186,7 @@ export function createNextRoute(options: CreateNextRouteOptions) {
 		try {
 			if (body.action === "send") {
 				return json(
-					await options.assistant.send({
+					await options.ultrapilot.send({
 						threadId: body.threadId,
 						branchId: body.branchId,
 						text: body.text,
@@ -194,21 +194,21 @@ export function createNextRoute(options: CreateNextRouteOptions) {
 				);
 			}
 			if (body.action === "edit-message") {
-				return json(await options.assistant.editMessage(body));
+				return json(await options.ultrapilot.editMessage(body));
 			}
 			if (body.action === "fork-branch") {
-				return json(await options.assistant.forkBranch(body));
+				return json(await options.ultrapilot.forkBranch(body));
 			}
 			if (body.action === "truncate-branch") {
-				return json(await options.assistant.truncateBranch(body));
+				return json(await options.ultrapilot.truncateBranch(body));
 			}
 			if (body.action === "regenerate") {
-				return json(await options.assistant.regenerate(body));
+				return json(await options.ultrapilot.regenerate(body));
 			}
 
 			return json(
 				await appendAndGenerate(
-					options.assistant,
+					options.ultrapilot,
 					body as AppendAndGenerateBody,
 				),
 			);
@@ -232,7 +232,7 @@ export function createNextRoute(options: CreateNextRouteOptions) {
 		if (!threadId) {
 			return json({ error: "threadId is required" }, 400);
 		}
-		const thread = await options.assistant.getThread(threadId);
+		const thread = await options.ultrapilot.getThread(threadId);
 		if (!thread) {
 			return json({ error: "thread not found" }, 404);
 		}
@@ -240,9 +240,9 @@ export function createNextRoute(options: CreateNextRouteOptions) {
 		if (!branchId) {
 			return json({ thread, branch: null, messages: [] });
 		}
-		const branches = await options.assistant.listBranches(threadId);
+		const branches = await options.ultrapilot.listBranches(threadId);
 		const branch = branches.find((entry) => entry.id === branchId) ?? null;
-		const messages = await options.assistant.getMessages({
+		const messages = await options.ultrapilot.getMessages({
 			threadId,
 			branchId,
 		});
@@ -253,17 +253,17 @@ export function createNextRoute(options: CreateNextRouteOptions) {
 }
 
 export function createThreadHistoryHandler(options: {
-	assistant: AssistantLike;
+	ultrapilot: UltraPilotLike;
 	resolveContext?: (request: Request) => Promise<Record<string, unknown>>;
 }) {
 	return async function GET(request: Request) {
 		await options.resolveContext?.(request);
-		const threads = await options.assistant.listThreads();
+		const threads = await options.ultrapilot.listThreads();
 		const history = await Promise.all(
 			threads.map(async (thread) => {
 				const branchId = thread.activeBranchId;
 				const messages = branchId
-					? await options.assistant.getMessages({
+					? await options.ultrapilot.getMessages({
 							threadId: thread.id,
 							branchId,
 						})

@@ -7,7 +7,9 @@
 		".": "./src/index.ts",
 		"./assistant": "./src/assistant.ts",
 		"./context-window": "./src/context-window.ts",
+		"./control-plane": "./src/control-plane.ts",
 		"./gemini-signature": "./src/gemini-signature.ts",
+		"./generation": "./src/generation.ts",
 		"./provider": "./src/provider.ts",
 		"./storage": "./src/storage.ts",
 		"./types": "./src/types.ts"

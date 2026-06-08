@@ -14,7 +14,7 @@ import type {
 	AssistantThread,
 } from "./types";
 
-type AssistantConfig = {
+type UltraPilotConfig = {
 	provider: ModelAdapter;
 	storage: AssistantStorage;
 	systemPrompt: string;
@@ -282,7 +282,7 @@ async function executeToolCall(
 	}
 }
 
-export function createAssistant(config: AssistantConfig) {
+export function createUltraPilot(config: UltraPilotConfig) {
 	const maxAttempts = config.retries?.maxAttempts ?? 1;
 	const delayMs = config.retries?.delayMs ?? (() => 0);
 

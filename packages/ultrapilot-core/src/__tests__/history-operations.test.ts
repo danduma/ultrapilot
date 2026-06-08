@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { createAssistant } from "../assistant";
+import { createUltraPilot } from "../assistant";
 import { createInMemoryStorage } from "../storage";
 import type { ModelAdapter } from "../provider";
 import { createSqliteStorage } from "@ultrapilot/storage-sqlite";
@@ -23,14 +23,14 @@ function createProvider(): ModelAdapter {
 
 describe("history operations", () => {
 	it("edits a prior user message by creating a new branch", async () => {
-		const assistant = createAssistant({
+		const ultrapilot = createUltraPilot({
 			provider: createProvider(),
 			storage: createInMemoryStorage(),
 			systemPrompt: "Be helpful.",
 			tools: {},
 		});
 
-		const original = await assistant.send({ text: "Original question" });
+		const original = await ultrapilot.send({ text: "Original question" });
 		const userMessage = original.messages.find(
 			(message) => message.role === "user",
 		);
@@ -39,7 +39,7 @@ describe("history operations", () => {
 			throw new Error("User message was not created");
 		}
 
-		const edited = await assistant.editMessage({
+		const edited = await ultrapilot.editMessage({
 			threadId: original.thread.id,
 			branchId: original.branch.id,
 			messageId: userMessage.id,
@@ -54,14 +54,14 @@ describe("history operations", () => {
 	});
 
 	it("truncates a branch while keeping a checkpoint record", async () => {
-		const assistant = createAssistant({
+		const ultrapilot = createUltraPilot({
 			provider: createProvider(),
 			storage: createInMemoryStorage(),
 			systemPrompt: "Be helpful.",
 			tools: {},
 		});
 
-		const original = await assistant.send({ text: "Keep only the first turn" });
+		const original = await ultrapilot.send({ text: "Keep only the first turn" });
 		const assistantMessage = original.messages.find(
 			(message) => message.role === "assistant",
 		);
@@ -73,7 +73,7 @@ describe("history operations", () => {
 			);
 		}
 
-		const truncated = await assistant.truncateBranch({
+		const truncated = await ultrapilot.truncateBranch({
 			threadId: original.thread.id,
 			branchId: original.branch.id,
 			messageId: firstMessage.id,
@@ -84,14 +84,14 @@ describe("history operations", () => {
 	});
 
 	it("forks a prior message into a new sqlite-backed branch without reusing message ids", async () => {
-		const assistant = createAssistant({
+		const ultrapilot = createUltraPilot({
 			provider: createProvider(),
 			storage: createSqliteStorage({ url: "file::memory:" }),
 			systemPrompt: "Be helpful.",
 			tools: {},
 		});
 
-		const original = await assistant.send({ text: "Try again from here" });
+		const original = await ultrapilot.send({ text: "Try again from here" });
 		const userMessage = original.messages.find(
 			(message) => message.role === "user",
 		);
@@ -100,7 +100,7 @@ describe("history operations", () => {
 			throw new Error("User message was not created");
 		}
 
-		const forked = await assistant.forkBranch({
+		const forked = await ultrapilot.forkBranch({
 			threadId: original.thread.id,
 			branchId: original.branch.id,
 			messageId: userMessage.id,
@@ -117,14 +117,14 @@ describe("history operations", () => {
 	});
 
 	it("edits a prior message into a new sqlite-backed branch without reusing message ids", async () => {
-		const assistant = createAssistant({
+		const ultrapilot = createUltraPilot({
 			provider: createProvider(),
 			storage: createSqliteStorage({ url: "file::memory:" }),
 			systemPrompt: "Be helpful.",
 			tools: {},
 		});
 
-		const original = await assistant.send({ text: "Original wording" });
+		const original = await ultrapilot.send({ text: "Original wording" });
 		const userMessage = original.messages.find(
 			(message) => message.role === "user",
 		);
@@ -133,7 +133,7 @@ describe("history operations", () => {
 			throw new Error("User message was not created");
 		}
 
-		const edited = await assistant.editMessage({
+		const edited = await ultrapilot.editMessage({
 			threadId: original.thread.id,
 			branchId: original.branch.id,
 			messageId: userMessage.id,

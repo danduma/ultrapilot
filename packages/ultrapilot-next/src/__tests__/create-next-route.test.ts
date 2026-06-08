@@ -1,5 +1,5 @@
 import { describe, expect, it, mock } from "bun:test";
-import { createAssistant } from "@ultrapilot/core/assistant";
+import { createUltraPilot } from "@ultrapilot/core/assistant";
 import { createInMemoryStorage } from "@ultrapilot/core/storage";
 import { createSqliteStorage } from "@ultrapilot/storage-sqlite";
 import {
@@ -24,14 +24,14 @@ describe("createNextRoute", () => {
 				};
 			},
 		};
-		const assistant = createAssistant({
+		const ultrapilot = createUltraPilot({
 			provider,
 			storage: createInMemoryStorage(),
 			systemPrompt: "Be helpful.",
 			tools: {},
 		});
 		const resolveContext = mock(async () => ({ userId: "user-1" }));
-		const { POST, GET } = createNextRoute({ assistant, resolveContext });
+		const { POST, GET } = createNextRoute({ ultrapilot, resolveContext });
 
 		const postResponse = await POST(
 			new Request("http://localhost/api/chat", {
@@ -84,15 +84,15 @@ describe("createNextRoute", () => {
 				};
 			},
 		};
-		const assistant = createAssistant({
+		const ultrapilot = createUltraPilot({
 			provider,
 			storage: createInMemoryStorage(),
 			systemPrompt: "Be helpful.",
 			tools: {},
 		});
-		await assistant.send({ text: "Keep this thread" });
+		await ultrapilot.send({ text: "Keep this thread" });
 
-		const historyHandler = createThreadHistoryHandler({ assistant });
+		const historyHandler = createThreadHistoryHandler({ ultrapilot });
 		const response = await historyHandler(
 			new Request("http://localhost/api/chat/history"),
 		);
@@ -117,13 +117,13 @@ describe("createNextRoute", () => {
 				};
 			},
 		};
-		const assistant = createAssistant({
+		const ultrapilot = createUltraPilot({
 			provider,
 			storage: createSqliteStorage({ url: "file::memory:" }),
 			systemPrompt: "Be helpful.",
 			tools: {},
 		});
-		const { POST } = createNextRoute({ assistant });
+		const { POST } = createNextRoute({ ultrapilot });
 
 		const firstResponse = await POST(
 			new Request("http://localhost/api/chat", {

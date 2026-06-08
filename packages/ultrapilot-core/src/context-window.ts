@@ -56,6 +56,13 @@ function estimatePartTokens(part: AssistantMessagePart): number {
 		return estimateTextTokens(part.text);
 	}
 
+	if (part.type === "image") {
+		// Image bytes are opaque to the text estimator. Charge a small flat cost
+		// for the part plus the reference string (URL or data: URI head); the
+		// real token cost is provider-side and not estimable here.
+		return estimateTextTokens(part.image) + 8;
+	}
+
 	if (part.type === "tool-call") {
 		return (
 			estimateTextTokens(part.toolName) + estimateValueTokens(part.args) + 8
@@ -85,6 +92,10 @@ export function estimateMessagesTokens(messages: AssistantMessage[]): number {
 function partToSummaryText(part: AssistantMessagePart): string {
 	if (part.type === "text" || part.type === "reasoning") {
 		return part.text;
+	}
+
+	if (part.type === "image") {
+		return "[image]";
 	}
 
 	if (part.type === "tool-call") {
