@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { createUltraPilot } from "../assistant";
 import type { ModelAdapter } from "../provider";
 import { createInMemoryStorage } from "../storage";
-import type { AssistantMessage } from "../types";
+import type { AssistantMessage, ImageToolResult } from "../types";
 
 function message({
 	id,
@@ -153,6 +153,109 @@ describe("run engine", () => {
 			type: "text",
 			text: "The sum is 5",
 		});
+	});
+
+	it("persists an image tool result as an acknowledgement followed by a user image message", async () => {
+		let step = 0;
+		let replayedMessages: AssistantMessage[] = [];
+		const provider: ModelAdapter = {
+			id: "multimodal-tool-provider",
+			capabilities: { reasoning: false, toolCalls: true },
+			async generate(input) {
+				step += 1;
+				if (step === 1) {
+					return {
+						id: "response-1",
+						text: "",
+						reasoning: [],
+						toolCalls: [
+							{
+								toolCallId: "call-frame-1",
+								toolName: "render_frame",
+								args: { timeSeconds: 2.5 },
+							},
+						],
+						usage: { inputTokens: 1, outputTokens: 1 },
+						providerMetadata: {},
+					};
+				}
+
+				replayedMessages = input.messages;
+				return {
+					id: "response-2",
+					text: "I can see the rendered frame.",
+					reasoning: [],
+					toolCalls: [],
+					usage: { inputTokens: 1, outputTokens: 1 },
+					providerMetadata: {},
+				};
+			},
+		};
+
+		const ultrapilot = createUltraPilot({
+			provider,
+			storage: createInMemoryStorage(),
+			systemPrompt: "Inspect rendered frames.",
+			tools: {
+				render_frame: {
+					description: "Renders one timeline frame.",
+					inputSchema: { type: "object" },
+					execute() {
+						return {
+							type: "image-tool-result",
+							result: { rendered: true, timeSeconds: 2.5 },
+							imageParts: [
+								{
+									image: "data:image/png;base64,REAL_FRAME_BYTES",
+									mediaType: "image/png",
+								},
+							],
+						} satisfies ImageToolResult;
+					},
+				},
+			},
+		});
+
+		const result = await ultrapilot.send({ text: "Show me frame 2.5." });
+
+		expect(result.messages.map((message) => message.role)).toEqual([
+			"user",
+			"assistant",
+			"tool",
+			"user",
+			"assistant",
+		]);
+		expect(result.messages[2]?.parts).toEqual([
+			{
+				type: "tool-result",
+				toolCallId: "call-frame-1",
+				toolName: "render_frame",
+				result: { rendered: true, timeSeconds: 2.5 },
+				isError: false,
+			},
+		]);
+		expect(result.messages[3]?.parts).toEqual([
+			{
+				type: "image",
+				image: "data:image/png;base64,REAL_FRAME_BYTES",
+				mediaType: "image/png",
+			},
+		]);
+		expect(
+			replayedMessages.slice(-2).map((message) => ({
+				role: message.role,
+				parts: message.parts,
+			})),
+		).toEqual([
+			{
+				role: "tool",
+				parts: result.messages[2]?.parts,
+			},
+			{
+				role: "user",
+				parts: result.messages[3]?.parts,
+			},
+		]);
 	});
 
 	it("summarizes older messages before provider calls when the input would exceed the context budget", async () => {

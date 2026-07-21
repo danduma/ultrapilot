@@ -219,6 +219,58 @@ describe("multimodal user content", () => {
 		]);
 	});
 
+	it("serializes an ordered image tool acknowledgement and follow-up as real wire content", () => {
+		const toolAcknowledgement: AssistantMessage = {
+			id: "tool-frame-1",
+			threadId: "thread-1",
+			branchId: "branch-1",
+			role: "tool",
+			createdAt: "2026-01-01T00:00:00.000Z",
+			parts: [
+				{
+					type: "tool-result",
+					toolCallId: "call-frame-1",
+					toolName: "render_frame",
+					result: { rendered: true, timeSeconds: 2.5 },
+					isError: false,
+				},
+			],
+			metadata: {},
+		};
+		const imageFollowUp = imageUser([
+			{
+				type: "image",
+				image: "data:image/png;base64,REAL_FRAME_BYTES",
+				mediaType: "image/png",
+			},
+		]);
+
+		expect(toMastraMessages([toolAcknowledgement, imageFollowUp])).toEqual([
+			{
+				role: "tool",
+				content: [
+					{
+						type: "tool-result",
+						toolCallId: "call-frame-1",
+						toolName: "render_frame",
+						result: { rendered: true, timeSeconds: 2.5 },
+						isError: false,
+					},
+				],
+			},
+			{
+				role: "user",
+				content: [
+					{
+						type: "image",
+						image: "data:image/png;base64,REAL_FRAME_BYTES",
+						mediaType: "image/png",
+					},
+				],
+			},
+		]);
+	});
+
 	it("maps array user content to UI image parts in toMastraUiMessages", () => {
 		const ui = toMastraUiMessages([
 			{

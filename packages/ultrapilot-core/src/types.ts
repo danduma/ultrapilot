@@ -37,6 +37,20 @@ export type ImagePart = {
 	providerOptions?: PartProviderOptions;
 };
 
+export type ToolResultImage = Omit<ImagePart, "type">;
+
+/**
+ * Public return shape for tools that intentionally send images to the model.
+ * Core stores `result` as the tool acknowledgement and each `imageParts` entry
+ * as a separate follow-up image message, keeping image data out of ordinary
+ * JSON tool results and their preview sanitizer.
+ */
+export type ImageToolResult = {
+	type: "image-tool-result";
+	result: unknown;
+	imageParts: ToolResultImage[];
+};
+
 export type ToolCallPart = {
 	type: "tool-call";
 	toolCallId: string;

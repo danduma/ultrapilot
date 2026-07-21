@@ -12,6 +12,7 @@ import type {
 	AssistantToolCall,
 	AssistantToolDefinition,
 	AssistantThread,
+	ImageToolResult,
 } from "./types";
 
 type UltraPilotConfig = {
@@ -84,6 +85,29 @@ function isToolCallPart(
 	part: AssistantMessagePart,
 ): part is Extract<AssistantMessagePart, { type: "tool-call" }> {
 	return part.type === "tool-call";
+}
+
+function isImageToolResult(result: unknown): result is ImageToolResult {
+	if (
+		typeof result !== "object" ||
+		result === null ||
+		!("type" in result) ||
+		result.type !== "image-tool-result" ||
+		!("imageParts" in result) ||
+		!Array.isArray(result.imageParts) ||
+		result.imageParts.length === 0 ||
+		!("result" in result)
+	) {
+		return false;
+	}
+
+	return result.imageParts.every(
+		(imagePart) =>
+			typeof imagePart === "object" &&
+			imagePart !== null &&
+			"image" in imagePart &&
+			typeof imagePart.image === "string",
+	);
 }
 
 function textContent(parts: AssistantMessage["parts"]) {
@@ -226,59 +250,96 @@ async function executeToolCall(
 	branchId: string,
 	toolCall: AssistantToolCall,
 	tools: Record<string, AssistantToolDefinition>,
-) {
+): Promise<AssistantMessage[]> {
 	const definition = tools[toolCall.toolName];
 	if (!definition?.execute) {
-		return createMessage({
-			threadId,
-			branchId,
-			role: "tool",
-			parts: [
-				{
-					type: "tool-result",
-					toolCallId: toolCall.toolCallId,
-					toolName: toolCall.toolName,
-					result: { error: `Tool not implemented: ${toolCall.toolName}` },
-					isError: true,
-				},
-			],
-		});
+		return [
+			createMessage({
+				threadId,
+				branchId,
+				role: "tool",
+				parts: [
+					{
+						type: "tool-result",
+						toolCallId: toolCall.toolCallId,
+						toolName: toolCall.toolName,
+						result: { error: `Tool not implemented: ${toolCall.toolName}` },
+						isError: true,
+					},
+				],
+			}),
+		];
 	}
 
 	try {
 		const result = await definition.execute(toolCall.args);
-		return createMessage({
-			threadId,
-			branchId,
-			role: "tool",
-			parts: [
-				{
-					type: "tool-result",
-					toolCallId: toolCall.toolCallId,
-					toolName: toolCall.toolName,
-					result,
-					isError: false,
-				},
-			],
-		});
-	} catch (error) {
-		return createMessage({
-			threadId,
-			branchId,
-			role: "tool",
-			parts: [
-				{
-					type: "tool-result",
-					toolCallId: toolCall.toolCallId,
-					toolName: toolCall.toolName,
-					result: {
-						error:
-							error instanceof Error ? error.message : "Tool execution failed",
+		const acknowledgedResult = isImageToolResult(result)
+			? result.result
+			: result;
+		const messages = [
+			createMessage({
+				threadId,
+				branchId,
+				role: "tool",
+				parts: [
+					{
+						type: "tool-result",
+						toolCallId: toolCall.toolCallId,
+						toolName: toolCall.toolName,
+						result: acknowledgedResult,
+						isError: false,
 					},
-					isError: true,
-				},
-			],
-		});
+				],
+			}),
+		];
+
+		if (isImageToolResult(result)) {
+			messages.push(
+				...result.imageParts.map((imagePart) =>
+					createMessage({
+						threadId,
+						branchId,
+						role: "user",
+						parts: [
+							{
+								type: "image",
+								image: imagePart.image,
+								...(imagePart.mediaType
+									? { mediaType: imagePart.mediaType }
+									: {}),
+								...(imagePart.providerOptions
+									? { providerOptions: imagePart.providerOptions }
+									: {}),
+							},
+						],
+					}),
+				),
+			);
+		}
+
+		return messages;
+	} catch (error) {
+		return [
+			createMessage({
+				threadId,
+				branchId,
+				role: "tool",
+				parts: [
+					{
+						type: "tool-result",
+						toolCallId: toolCall.toolCallId,
+						toolName: toolCall.toolName,
+						result: {
+							error:
+								error instanceof Error
+									? error.message
+									: "Tool execution failed",
+						},
+						isError: true,
+					},
+				],
+			}),
+		];
 	}
 }
 
@@ -391,13 +452,14 @@ export function createUltraPilot(config: UltraPilotConfig) {
 
 				const toolMessages = [];
 				for (const toolCall of toolCalls) {
-					const toolMessage = await executeToolCall(
-						thread.id,
-						branch.id,
-						toolCall,
-						config.tools,
+					toolMessages.push(
+						...(await executeToolCall(
+							thread.id,
+							branch.id,
+							toolCall,
+							config.tools,
+						)),
 					);
-					toolMessages.push(toolMessage);
 				}
 
 				await config.storage.appendMessages({

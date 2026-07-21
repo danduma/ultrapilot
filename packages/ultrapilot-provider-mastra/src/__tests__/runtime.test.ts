@@ -3,6 +3,7 @@ import type { AssistantMessage } from "@ultrapilot/core/types";
 import {
 	buildMastraModelConfig,
 	createMastraProvider,
+	selectAgentMessageInput,
 	type UltraPilotProviderProfile,
 } from "../index";
 
@@ -18,16 +19,16 @@ function profile(
 }
 
 describe("buildMastraModelConfig provider mapping", () => {
-	it("maps gemini -> google/<model> with default Google base", () => {
+	it("maps gemini -> google/<model> through the provider registry", () => {
 		const cfg = buildMastraModelConfig(profile({ provider: "gemini" }));
 		expect(cfg.id).toBe("google/gpt-4o-mini");
-		expect(cfg.baseURL).toBe("https://generativelanguage.googleapis.com/v1");
+		expect(cfg.url).toBeUndefined();
 	});
 
 	it("maps openai -> openai/<model> with no base", () => {
 		const cfg = buildMastraModelConfig(profile({ provider: "openai" }));
 		expect(cfg.id).toBe("openai/gpt-4o-mini");
-		expect(cfg.baseURL).toBeUndefined();
+		expect(cfg.url).toBeUndefined();
 	});
 
 	it("maps openai_compatible -> openai-compatible/<model> with explicit baseUrl", () => {
@@ -38,25 +39,32 @@ describe("buildMastraModelConfig provider mapping", () => {
 			}),
 		);
 		expect(cfg.id).toBe("openai-compatible/gpt-4o-mini");
-		expect(cfg.baseURL).toBe("http://localhost:1234/v1");
+		expect(cfg.url).toBe("http://localhost:1234/v1");
 	});
 
 	it("maps anthropic -> anthropic/<model> with no base", () => {
 		const cfg = buildMastraModelConfig(profile({ provider: "anthropic" }));
 		expect(cfg.id).toBe("anthropic/gpt-4o-mini");
-		expect(cfg.baseURL).toBeUndefined();
+		expect(cfg.url).toBeUndefined();
 	});
 
 	it("maps openrouter -> openai-compatible/<model> with default openrouter base", () => {
 		const cfg = buildMastraModelConfig(profile({ provider: "openrouter" }));
 		expect(cfg.id).toBe("openai-compatible/gpt-4o-mini");
-		expect(cfg.baseURL).toBe("https://openrouter.ai/api/v1");
+		expect(cfg.url).toBe("https://openrouter.ai/api/v1");
 	});
 
-	it("maps codex_openai -> openai-compatible/<model> with default OpenAI base", () => {
-		const cfg = buildMastraModelConfig(profile({ provider: "codex_openai" }));
-		expect(cfg.id).toBe("openai-compatible/gpt-4o-mini");
-		expect(cfg.baseURL).toBe("https://api.openai.com/v1");
+	it("maps Codex login to the subscription Responses endpoint and account", () => {
+		const cfg = buildMastraModelConfig(
+			profile({
+				provider: "codex_openai",
+				accountId: "account-123",
+			}),
+		);
+		expect(cfg.id).toBe("openai/gpt-4o-mini");
+		expect(cfg.url).toBe("https://chatgpt.com/backend-api/codex");
+		expect(cfg.headers).toEqual({ "ChatGPT-Account-ID": "account-123" });
+		expect(cfg.api).toBe("responses");
 	});
 
 	it("lets an explicit baseUrl override the provider default", () => {
@@ -66,7 +74,31 @@ describe("buildMastraModelConfig provider mapping", () => {
 				baseUrl: "https://custom.openrouter.example/v1",
 			}),
 		);
-		expect(cfg.baseURL).toBe("https://custom.openrouter.example/v1");
+		expect(cfg.url).toBe("https://custom.openrouter.example/v1");
+	});
+
+	it("keeps Codex multimodal messages in model-message form", () => {
+		const messages = [
+			{
+				role: "user" as const,
+				content: [
+					{ type: "text" as const, text: "Describe this image" },
+					{
+						type: "image" as const,
+						image: "data:image/jpeg;base64,REAL_FRAME_BYTES",
+						mediaType: "image/jpeg",
+					},
+				],
+			},
+		];
+
+		const selected = selectAgentMessageInput(
+			messages,
+			profile({ provider: "codex_openai" }),
+		);
+
+		expect(selected).toBe(messages);
+		expect(selected[0]).toEqual(messages[0]);
 	});
 });
 
@@ -195,6 +227,29 @@ describe("createMastraProvider (injected generate override)", () => {
 			[{ role: "user", content: "hello" }],
 			GEMINI_THINKING_OPTIONS,
 		);
+	});
+
+	it("disables response storage for Codex subscription requests", async () => {
+		const generate = mock(async () => ({
+			text: "OK",
+			reasoning: [],
+			toolCalls: [],
+			providerMetadata: {},
+		}));
+		const provider = createMastraProvider({
+			generate,
+			profile: profile({ provider: "codex_openai" }),
+		});
+
+		await provider.generate({
+			systemPrompt: "Be helpful",
+			messages: [buildUserMessage("hello")],
+			tools: {},
+		});
+
+		expect(generate.mock.calls[0]?.[1]).toMatchObject({
+			providerOptions: { openai: { store: false } },
+		});
 	});
 
 	it("replays stored raw assistant messages so provider tool metadata survives", async () => {

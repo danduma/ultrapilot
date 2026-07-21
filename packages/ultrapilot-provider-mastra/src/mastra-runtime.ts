@@ -11,7 +11,7 @@
 //   - openai_compatible  -> openai-compatible/<model> (requires baseUrl)
 //   - anthropic          -> anthropic/<model>
 //   - openrouter         -> openai-compatible/<model> w/ openrouter baseUrl
-//   - codex_openai       -> openai-compatible/<model> w/ OpenAI baseUrl
+//   - codex_openai       -> OpenAI Responses model w/ Codex subscription base URL
 
 import { enforceGeminiSignatureInvariant } from "@ultrapilot/core/gemini-signature";
 import type { ModelAdapter } from "@ultrapilot/core/provider";
@@ -65,19 +65,20 @@ export type UltraPilotProviderProfile = {
 	model: string;
 	apiKey: string;
 	baseUrl?: string;
+	accountId?: string;
 };
 
-/** Internal Mastra model config shape: `{ id, apiKey, baseURL? }`. */
+/** Internal Mastra model config shape consumed by the model factory. */
 export type MastraModelConfig = {
 	id: string;
 	apiKey: string;
-	baseURL?: string;
+	url?: string;
+	headers?: Record<string, string>;
+	api?: "responses";
 };
 
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
-const OPENAI_BASE_URL = "https://api.openai.com/v1";
-const GOOGLE_GENERATIVE_LANGUAGE_BASE_URL =
-	"https://generativelanguage.googleapis.com/v1";
+const CODEX_BASE_URL = "https://chatgpt.com/backend-api/codex";
 
 function modelIdPrefix(provider: UltraPilotProviderKind): string {
 	switch (provider) {
@@ -89,8 +90,9 @@ function modelIdPrefix(provider: UltraPilotProviderKind): string {
 			return "anthropic";
 		case "openai_compatible":
 		case "openrouter":
-		case "codex_openai":
 			return "openai-compatible";
+		case "codex_openai":
+			return "openai";
 	}
 }
 
@@ -101,12 +103,10 @@ function effectiveBaseUrl(
 		return profile.baseUrl;
 	}
 	switch (profile.provider) {
-		case "gemini":
-			return GOOGLE_GENERATIVE_LANGUAGE_BASE_URL;
 		case "openrouter":
 			return OPENROUTER_BASE_URL;
 		case "codex_openai":
-			return OPENAI_BASE_URL;
+			return CODEX_BASE_URL;
 		default:
 			return undefined;
 	}
@@ -123,7 +123,26 @@ export function buildMastraModelConfig(
 		apiKey: profile.apiKey,
 	};
 	if (baseURL) {
-		config.baseURL = baseURL;
+		config.url = baseURL;
+	}
+	if (profile.provider === "codex_openai") {
+		config.api = "responses";
+		if (profile.accountId) {
+			config.headers = { "ChatGPT-Account-ID": profile.accountId };
+		}
+	}
+	return config;
+}
+
+async function createMastraModel(profile: UltraPilotProviderProfile) {
+	const config = buildMastraModelConfig(profile);
+	if (config.api === "responses") {
+		const { createOpenAI } = await import("@ai-sdk/openai-v5");
+		return createOpenAI({
+			apiKey: config.apiKey,
+			baseURL: config.url,
+			headers: config.headers,
+		}).responses(profile.model);
 	}
 	return config;
 }
@@ -134,6 +153,14 @@ const GEMINI_3_PROVIDER_OPTIONS = {
 			thinkingConfig: {
 				thinkingLevel: "low" as const,
 			},
+		},
+	},
+};
+
+const CODEX_PROVIDER_OPTIONS = {
+	providerOptions: {
+		openai: {
+			store: false,
 		},
 	},
 };
@@ -180,24 +207,42 @@ export async function createMastraAgentConfig(
 	{ instructions, tools, id, name }: CreateMastraAgentConfigInput,
 ): Promise<MastraAgentLike> {
 	const { Agent } = await import("@mastra/core/agent");
-	const model = buildMastraModelConfig(profile);
+	const model = await createMastraModel(profile);
 	// Accept framework-agnostic AssistantToolDefinitions (the @opencut/assistant
 	// shape) and wrap them with Mastra `createTool` so the agent advertises proper
 	// schemas to the model. Tools already in Mastra shape pass through unchanged.
 	const agentTools = isAssistantToolDefinitions(tools)
 		? await createMastraToolsFromDefinitions(tools)
 		: tools;
-	return new Agent({
+	const agent = new Agent({
 		id: id ?? "opencut-copilot",
 		name: name ?? "Copilot",
 		instructions,
 		// Cast to satisfy Mastra's DynamicArgument wrapper around the static
-		// config shape. We always pass the literal `{ id, apiKey, baseURL? }`.
+		// config shape. Codex uses a concrete Responses model; other providers use
+		// the model-router configuration.
 		model: model as unknown as ConstructorParameters<typeof Agent>[0]["model"],
 		tools: agentTools as unknown as ConstructorParameters<
 			typeof Agent
 		>[0]["tools"],
-	}) as unknown as MastraAgentLike;
+	});
+	if (profile.provider === "codex_openai") {
+		const streamingAgent = agent as unknown as {
+			stream: (
+				messages: unknown,
+				options?: MastraGenerateOptions,
+			) => Promise<{ getFullOutput: () => Promise<unknown> }>;
+		};
+		return {
+			async generate(messages, options) {
+				const output = options
+					? await streamingAgent.stream(messages, options)
+					: await streamingAgent.stream(messages);
+				return output.getFullOutput();
+			},
+		};
+	}
+	return agent as unknown as MastraAgentLike;
 }
 
 export type MastraProviderDependencies = {
@@ -224,6 +269,20 @@ export type MastraProviderDependencies = {
 	 */
 	tools?: Record<string, unknown>;
 };
+
+/**
+ * Codex uses an AI SDK v5 Responses model. Preserve model-message image parts
+ * for that path; converting them to the legacy UI-message shape causes Mastra
+ * to discard the images before the provider request.
+ */
+export function selectAgentMessageInput(
+	messages: MastraMessage[],
+	profile?: UltraPilotProviderProfile,
+): MastraMessage[] | MastraUiMessage[] {
+	return profile?.provider === "codex_openai"
+		? messages
+		: toMastraUiMessages(messages);
+}
 
 /**
  * Builds a @ultrapilot/core `ModelAdapter` backed by Mastra.
@@ -254,7 +313,7 @@ export function createMastraProvider(
 	};
 
 	const generateForAgent = async (
-		messages: MastraUiMessage[],
+		messages: MastraMessage[] | MastraUiMessage[],
 		options?: MastraGenerateOptions,
 	): Promise<MastraGenerateResult> => {
 		const agent = await getAgent();
@@ -309,13 +368,22 @@ export function createMastraProvider(
 				: wireMessages;
 			assertHasConversationMessages(messages);
 			const activeTools = selectActiveMastraTools(input);
+			const providerOptions =
+				dependencies.profile?.provider === "codex_openai"
+					? CODEX_PROVIDER_OPTIONS
+					: !dependencies.profile || dependencies.profile.provider === "gemini"
+						? GEMINI_3_PROVIDER_OPTIONS
+						: {};
 			const generateOptions = {
-				...GEMINI_3_PROVIDER_OPTIONS,
+				...providerOptions,
 				...(activeTools ? { activeTools } : {}),
 			};
 			const response = dependencies.generate
 				? await dependencies.generate(messages, generateOptions)
-				: await generateForAgent(toMastraUiMessages(messages), generateOptions);
+				: await generateForAgent(
+						selectAgentMessageInput(messages, dependencies.profile),
+						generateOptions,
+					);
 			const rawResponseMessages = stripEchoedAssistantPromptParts(
 				response.response?.messages?.filter(isMastraAssistantMessage) ?? [],
 				messages,
