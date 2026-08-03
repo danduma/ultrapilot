@@ -161,6 +161,7 @@ const CODEX_PROVIDER_OPTIONS = {
 	providerOptions: {
 		openai: {
 			store: false,
+			reasoningEffort: "medium" as const,
 		},
 	},
 };

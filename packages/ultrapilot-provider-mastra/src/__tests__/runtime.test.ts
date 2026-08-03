@@ -248,7 +248,9 @@ describe("createMastraProvider (injected generate override)", () => {
 		});
 
 		expect(generate.mock.calls[0]?.[1]).toMatchObject({
-			providerOptions: { openai: { store: false } },
+			providerOptions: {
+				openai: { store: false, reasoningEffort: "medium" },
+			},
 		});
 	});
 
